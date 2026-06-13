@@ -96,40 +96,58 @@ function App() {
     setCancion({ ...cancion, bloques: bloquesRenumerados });
   };
 
+  // --- LÓGICA GRABADOR DE AUDIO MODIFICADA PARA COMPATIBILIDAD MÓVIL TOTAL ---
   const iniciarGrabacion = async (bloqueId) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      // Dejamos que el celu decida su codificación nativa más estable
       mediaRecorderRef.current = new MediaRecorder(stream);
       audioChunksRef.current = [];
 
       mediaRecorderRef.current.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
       };
 
       mediaRecorderRef.current.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+        // En lugar de clavar 'audio/wav', usamos el tipo nativo del grabador del dispositivo
+        const tipoNativo = mediaRecorderRef.current.mimeType || 'audio/webm';
+        const audioBlob = new Blob(audioChunksRef.current, { type: tipoNativo });
+        
         const reader = new FileReader();
         reader.readAsDataURL(audioBlob);
         reader.onloadend = () => {
           const base64Audio = reader.result;
-          const bloquesActualizados = cancion.bloques.map((b) => {
-            if (b.id === bloqueId) {
-              const numeroAudio = b.audios.length + 1;
-              return {
-                ...b,
-                audios: [...b.audios, { id: Date.now().toString(), nombre: `Idea ${numeroAudio}`, url: base64Audio }]
-              };
-            }
-            return b;
+
+          // Seguro contra fallos: si el base64 es insignificante, la grabación falló en el hardware
+          if (base64Audio.length < 200) {
+            alert("No se pudo procesar el audio correctamente. Asegurate de dar los permisos e intentalo de nuevo.");
+            return;
+          }
+
+          setCancion((prevCancion) => {
+            const bloquesActualizados = prevCancion.bloques.map((b) => {
+              if (b.id === bloqueId) {
+                const numeroAudio = b.audios.length + 1;
+                return {
+                  ...b,
+                  audios: [...b.audios, { id: Date.now().toString(), nombre: `Idea ${numeroAudio}`, url: base64Audio }]
+                };
+              }
+              return b;
+            });
+            return { ...prevCancion, bloques: bloquesActualizados };
           });
-          setCancion({ ...cancion, bloques: bloquesActualizados });
         };
       };
 
-      mediaRecorderRef.current.start();
+      // Solicitamos paquetes de datos cada 250ms para que Android no se cuelgue al procesar
+      mediaRecorderRef.current.start(250);
       setGrabandoEnBloqueId(bloqueId);
     } catch (err) {
-      alert("No se pudo acceder al micrófono.");
+      alert("No se pudo acceder al micrófono. Revisá los permisos en el candado del navegador.");
     }
   };
 
@@ -285,7 +303,7 @@ function App() {
         .lista-audios-bloque { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #25293c; padding-top: 10px; }
         .item-audio { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #1e2230; padding: 6px 10px; border-radius: 6px; }
         .nombre-audio { font-size: 12px; color: #a0aec0; }
-        .reproductor-nativo { flex: 1; height: 32px; }
+        .reproductor-nativo { flex: 1; height: 32px; min-width: 140px; }
         .btn-borrar-audio { background: transparent; border: none; cursor: pointer; font-size: 16px; }
 
         .modo-vivo .lista-bloques { padding-bottom: 100px; }
@@ -425,7 +443,8 @@ function App() {
                     >
                       🎙️ Grabar Idea
                     </button>
-                  )}
+                  )
+                  }
                 </div>
               )}
 
