@@ -23,7 +23,7 @@ function App() {
     const guardado = localStorage.getItem('compositor_cancion');
     if (guardado) {
       const cancionParseada = JSON.parse(guardado);
-      // Limpiamos audios viejos al cargar para evitar URLs rotas de sesiones pasadas
+      // Limpiamos referencias de audios viejos al cargar para evitar URLs rotas de sesiones pasadas
       cancionParseada.bloques = cancionParseada.bloques.map(b => ({ ...b, audios: [] }));
       setCancion(cancionParseada);
     }
@@ -101,11 +101,28 @@ function App() {
     setCancion({ ...cancion, bloques: bloquesRenumerados });
   };
 
-  // --- NUEVA LÓGICA DE AUDIO ULTRA-LIVIANA PARA MÓVILES ---
+  // --- LÓGICA DE AUDIO REFORZADA E INMUNE A TRAVAS DE CHROME MÓVIL ---
   const iniciarGrabacion = async (bloqueId) => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorderRef.current = new MediaRecorder(stream);
+      // Forzamos configuraciones ultra-básicas para que el Chrome del celu no se maree
+      const opcionesAudio = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          channelCount: 1, // Forzamos MONO
+          sampleRate: 44100
+        }
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(opcionesAudio);
+      
+      // Buscamos el contenedor de audio más estándar soportado por el navegador
+      let tipoMime = 'audio/webm;codecs=opus';
+      if (!MediaRecorder.isTypeSupported(tipoMime)) tipoMime = 'audio/webm';
+      if (!MediaRecorder.isTypeSupported(tipoMime)) tipoMime = 'audio/ogg';
+      if (!MediaRecorder.isTypeSupported(tipoMime)) tipoMime = ''; 
+
+      mediaRecorderRef.current = new MediaRecorder(stream, tipoMime ? { mimeType: tipoMime } : {});
       audioChunksRef.current = [];
 
       mediaRecorderRef.current.ondataavailable = (e) => {
@@ -118,7 +135,7 @@ function App() {
         const tipoNativo = mediaRecorderRef.current.mimeType || 'audio/webm';
         const audioBlob = new Blob(audioChunksRef.current, { type: tipoNativo });
         
-        // El truco mágico: Creamos un link directo en la memoria ram del celu, sin conversiones pesadas
+        // Creamos link instantáneo en la RAM para que se dibuje el reproductor sí o sí
         const urlDirecta = URL.createObjectURL(audioBlob);
 
         setCancion((prevCancion) => {
@@ -136,10 +153,11 @@ function App() {
         });
       };
 
-      mediaRecorderRef.current.start();
+      // Le pedimos que guarde pedacitos de datos cada 1 segundo (evita archivos corruptos de 0 bytes)
+      mediaRecorderRef.current.start(1000);
       setGrabandoEnBloqueId(bloqueId);
     } catch (err) {
-      alert("Microfono bloqueado. Usá la web desde Chrome común.");
+      alert("Error al acceder al micrófono. Verificá que Chrome tenga los permisos.");
     }
   };
 
@@ -169,7 +187,7 @@ function App() {
           margin: 0; padding: 0; background-color: #12141c !important; color: #e0e6ed !important;
           font-family: 'Segoe UI', Roboto, sans-serif; min-height: 100vh;
         }
-        .app-compositor { max-width: 600px; margin: 0 auto; padding: 15px; box-sizing: border-box; background-color: #12141c; min-height: 100vh; }
+        .app-compositor { max-width: 600px; margin: 0 auto; padding: 15px; box-shadow: box-sizing; background-color: #12141c; min-height: 100vh; }
         .barra-modos { margin-bottom: 15px; position: sticky; top: 0; z-index: 999; }
         .btn-cambio-modo { width: 100%; padding: 14px; border-radius: 10px; font-size: 15px; font-weight: bold; cursor: pointer; border: none; color: white; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .btn-cambio-modo.comp { background-color: #2c313d; border: 1px solid #3b425c; }
@@ -186,7 +204,7 @@ function App() {
         .btn-est { flex: 1; min-width: 80px; padding: 10px; border: none; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; color: #fff; }
         .btn-est.intro { background-color: #3f51b5; }
         .btn-est.estrofa { background-color: #2da44e; }
-        .btn-est.pre-estribillo { background-color: #00bcd4; }
+        .btn-est.pre-estribillo { background-color: #00_bcd4; }
         .btn-est.estribillo { background-color: #e91e63; }
         .btn-est.puente { background-color: #9c27b0; }
         .btn-est.solo { background-color: #ff9800; }
