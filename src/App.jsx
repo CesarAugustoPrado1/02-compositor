@@ -324,8 +324,8 @@ function App() {
         .btn-est.intro { background-color: #3f51b5; }
         .btn-est.estrofa { background-color: #2da44e; }
         
-        /* CORREGIDO: Selector especial para soportar el guion del botón 'pre-estribillo' */
-        .btn-est[class*="pre-estribillo"] { background-color: #ffcc00 !important; color: #12141c !important; }
+        /* CORREGIDO: Ahora busca exactamente 'preestribillo' sin guion, tal como lo renderiza el map */
+        .btn-est.preestribillo { background-color: #ffcc00 !important; color: #12141c !important; }
         
         .btn-est.estribillo { background-color: #e91e63; }
         .btn-est.puente { background-color: #9c27b0; }
@@ -336,8 +336,8 @@ function App() {
         .tarjeta-bloque.intro { border-left-color: #3f51b5; }
         .tarjeta-bloque.estrofa { border-left-color: #2da44e; }
         
-        /* CORREGIDO: Selector especial para la tarjeta */
-        .tarjeta-bloque[class*="pre-estribillo"] { border-left-color: #ffcc00 !important; }
+        /* CORREGIDO: Borde de la tarjeta alineado sin guion */
+        .tarjeta-bloque.preestribillo { border-left-color: #ffcc00 !important; }
         
         .tarjeta-bloque.estribillo { border-left-color: #e91e63; }
         .tarjeta-bloque.puente { border-left-color: #9c27b0; }
