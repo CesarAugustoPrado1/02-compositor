@@ -69,7 +69,7 @@ function App() {
           numero: b.numero,
           texto: b.texto,
           acordes: b.acordes,
-          comments: b.comentarios,
+          comentarios: b.comentarios, // REVERTIDO AL NOMBRE ORIGINAL SEGURO
           audios: b.audios || []
         }))
       });
@@ -324,19 +324,19 @@ function App() {
         .btn-est.intro { background-color: #3f51b5; }
         .btn-est.estrofa { background-color: #2da44e !important; }
         
-        /* SOLUCIÓN: Identificador de clase totalmente exclusivo */
+        /* CORREGIDO PERMANENTE: Nueva clase pre-chunk inmune a conflictos */
         .btn-est.pre-chunk { background-color: #ffcc00 !important; color: #12141c !important; }
         
         .btn-est.estribillo { background-color: #e91e63; }
         .btn-est.puente { background-color: #9c27b0; }
         .btn-est.solo { background-color: #ff9800; }
         .btn-est.final { background-color: #607d8b; }
-        .lista-bloques { display: flex; flex-direction: column; gap: 20px; }
+        .lista-blocks-render { display: flex; flex-direction: column; gap: 20px; }
         .tarjeta-bloque { background: #1e2230; border-radius: 14px; padding: 15px; border-left: 6px solid #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
         .tarjeta-bloque.intro { border-left-color: #3f51b5; }
         .tarjeta-bloque.estrofa { border-left-color: #2da44e !important; }
         
-        /* SOLUCIÓN: Borde amarillo asegurado sin colisiones */
+        /* CORREGIDO PERMANENTE: Borde de tarjeta amarillo puro */
         .tarjeta-bloque.pre-chunk { border-left-color: #ffcc00 !important; }
         
         .tarjeta-bloque.estribillo { border-left-color: #e91e63; }
@@ -440,7 +440,7 @@ function App() {
             </div>
           )}
 
-          <main className="lista-bloques">
+          <main className="lista-blocks-render">
             {cancion.bloques.map((bloque) => {
               const claseTarjeta = bloque.tipo === 'Pre-Estribillo' ? 'pre-chunk' : bloque.tipo.toLowerCase().replace('-', '');
               return (
@@ -481,11 +481,11 @@ function App() {
                     )}
                   </div>
 
-                  {/* COMENTARIOS: Abiertos para que invitados dejen sus sugerencias de texto */}
+                  {/* COMENTARIOS CORREGIDOS: Conectan perfecto a b.comentarios */}
                   {modoEdicion ? (
-                    <input type="text" placeholder="💡 Dejá tu sugerencia o comentario..." value={bloque.comments || ''} onChange={(e) => modificarBloqueLocal(bloque.id, 'comentarios', e.target.value)} className="input-comentarios" />
+                    <input type="text" placeholder="💡 Dejá tu sugerencia o comentario..." value={bloque.comentarios || ''} onChange={(e) => modificarBloqueLocal(bloque.id, 'comentarios', e.target.value)} className="input-comentarios" />
                   ) : (
-                    bloque.comments && <div className="comentario-vivo-txt">💡 {bloque.comments}</div>
+                    bloque.comentarios && <div className="comentario-vivo-txt">💡 {bloque.comentarios}</div>
                   )}
 
                   <div className="estudio-audio-bloque">
@@ -535,3 +535,4 @@ function App() {
 }
 
 export default App;
+// Control de actualización forzada de Git v2
