@@ -323,7 +323,10 @@ function App() {
         .btn-est { flex: 1; min-width: 80px; padding: 10px; border: none; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; color: #fff; }
         .btn-est.intro { background-color: #3f51b5; }
         .btn-est.estrofa { background-color: #2da44e; }
-        .btn-est.pre-estribillo { background-color: #ffcc00; color: #12141c; } /* NUEVO COLOR: AMARILLO PRE-ESTRIBILLO */
+        
+        /* CORREGIDO: Selector especial para soportar el guion del botón 'pre-estribillo' */
+        .btn-est[class*="pre-estribillo"] { background-color: #ffcc00 !important; color: #12141c !important; }
+        
         .btn-est.estribillo { background-color: #e91e63; }
         .btn-est.puente { background-color: #9c27b0; }
         .btn-est.solo { background-color: #ff9800; }
@@ -332,7 +335,10 @@ function App() {
         .tarjeta-bloque { background: #1e2230; border-radius: 14px; padding: 15px; border-left: 6px solid #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
         .tarjeta-bloque.intro { border-left-color: #3f51b5; }
         .tarjeta-bloque.estrofa { border-left-color: #2da44e; }
-        .tarjeta-bloque.pre-estribillo { border-left-color: #ffcc00; } /* NUEVO COLOR BORDES */
+        
+        /* CORREGIDO: Selector especial para la tarjeta */
+        .tarjeta-bloque[class*="pre-estribillo"] { border-left-color: #ffcc00 !important; }
+        
         .tarjeta-bloque.estribillo { border-left-color: #e91e63; }
         .tarjeta-bloque.puente { border-left-color: #9c27b0; }
         .tarjeta-bloque.solo { border-left-color: #ff9800; }
