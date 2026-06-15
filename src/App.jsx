@@ -34,7 +34,7 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // 2. Cargar el listado de canciones del usuario
+  // 2. Cargar el listado de canciones generales de la base de datos
   useEffect(() => {
     if (usuario) cargarListaCanciones();
   }, [usuario]);
@@ -62,6 +62,7 @@ function App() {
         id: infoCancion.id,
         titulo: infoCancion.titulo,
         bpm: infoCancion.bpm,
+        usuario_id: infoCancion.usuario_id, // Guardamos quién la creó para validar permisos
         bloques: datosBloques.map(b => ({
           id: b.id,
           tipo: b.tipo,
@@ -75,11 +76,27 @@ function App() {
     }
   };
 
-  // 4. Crear una canción nueva en la nube
+  // 4. Crear una canción nueva verificando que el nombre no se repita
   const crearNuevaCancion = async () => {
+    let tituloDefinitivo = 'Nueva Canción';
+    let existe = true;
+    let contador = 1;
+
+    // Bucle para verificar nombres duplicados en la lista local antes de insertar
+    while (existe) {
+      const nombreBuscar = contador === 1 ? 'Nueva Canción' : `Nueva Canción ${contador}`;
+      const duplicada = listaCanciones.some(c => c.titulo.toLowerCase() === nombreBuscar.toLowerCase());
+      if (!duplicada) {
+        tituloDefinitivo = nombreBuscar;
+        existe = false;
+      } else {
+        contador++;
+      }
+    }
+
     const { data: nuevaCan, error: errCan } = await supabase
       .from('canciones')
-      .insert([{ titulo: 'Nueva Canción', bpm: '120', usuario_id: usuario.id }])
+      .insert([{ titulo: tituloDefinitivo, bpm: '120', usuario_id: usuario.id }])
       .select()
       .single();
 
@@ -94,8 +111,9 @@ function App() {
     }
   };
 
-  // 5. Auto-guardar cambios de texto o acordes (Sincronización directa)
+  // 5. Auto-guardar cambios (Solo si el usuario es el creador)
   const guardarCambioEnServidor = async (bloqueId, campo, valor) => {
+    if (cancion.usuario_id !== usuario.id) return; // Bloqueo de seguridad a nivel de ejecución
     await supabase
       .from('bloques')
       .update({ [campo]: valor })
@@ -103,6 +121,12 @@ function App() {
   };
 
   const modificarBloqueLocal = (id, campo, valor) => {
+    // Si no es el creador, solo le permitimos editar el campo 'comentarios' como sugerencia de texto
+    if (cancion.usuario_id !== usuario.id && campo !== 'comentarios') {
+      alert("Solo el creador original puede modificar la letra o acordes base.");
+      return;
+    }
+
     setCancion(prev => {
       const actualizados = prev.bloques.map(b => b.id === id ? { ...b, [campo]: valor } : b);
       return { ...prev, bloques: actualizados };
@@ -111,6 +135,17 @@ function App() {
   };
 
   const modificarTituloBpm = async (campo, valor) => {
+    if (cancion.usuario_id !== usuario.id) return;
+
+    // Validación extra: Si cambia el título, verificar que no se llame igual a otra existente
+    if (campo === 'titulo') {
+      const nombreRepetido = listaCanciones.some(c => c.id !== cancion.id && c.titulo.toLowerCase() === valor.trim().toLowerCase());
+      if (nombreRepetido) {
+        alert("Ya existe otra canción con ese nombre. Elegí uno distinto.");
+        return;
+      }
+    }
+
     setCancion(prev => ({ ...prev, [campo]: valor }));
     await supabase.from('canciones').update({ [campo]: valor }).eq('id', cancion.id);
     cargarListaCanciones();
@@ -118,6 +153,11 @@ function App() {
 
   // 6. Agregar y quitar bloques en la nube
   const agregarBloque = async (tipo) => {
+    if (cancion.usuario_id !== usuario.id) {
+      alert("Solo el creador puede alterar la estructura de la canción.");
+      return;
+    }
+
     const cantidadMismoTipo = cancion.bloques.filter(b => b.tipo === tipo).length;
     const nuevoNumero = cantidadMismoTipo + 1;
     const ordenNuevo = cancion.bloques.length + 1;
@@ -137,9 +177,9 @@ function App() {
   };
 
   const eliminarBloque = async (id) => {
+    if (cancion.usuario_id !== usuario.id) return;
     const { error } = await supabase.from('bloques').delete().eq('id', id);
     if (!error) {
-      // Volvemos a pedir los bloques para reordenar la numeración limpia
       seleccionarCancion(cancionSeleccionada);
     }
   };
@@ -148,12 +188,12 @@ function App() {
     e.stopPropagation();
     if (confirm('¿Seguro querés eliminar todo este borrador? No se puede deshacer.')) {
       await supabase.from('canciones').delete().eq('id', cancionId);
-      setCancion(null);
+      if (cancion?.id === cancionId) setCancion(null);
       cargarListaCanciones();
     }
   };
 
-  // 7. LÓGICA DE AUDIO PRO CON STORAGE EN LA NUBE
+  // 7. LÓGICA DE AUDIO (Cualquier usuario puede grabar su sugerencia)
   const iniciarGrabacion = async (bloqueId) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -175,10 +215,8 @@ function App() {
         const tipoNativo = mediaRecorderRef.current.mimeType || 'audio/webm';
         const audioBlob = new Blob(audioChunksRef.current, { type: tipoNativo });
         
-        // Generamos un nombre único de archivo para que no se pisen en la nube
         const nombreArchivo = `${usuario.id}/${bloqueId}-${Date.now()}.webm`;
 
-        // Subimos el archivo real al balde de Supabase Storage
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('audios-compositor')
           .upload(nombreArchivo, audioBlob, { contentType: tipoNativo });
@@ -188,12 +226,11 @@ function App() {
           return;
         }
 
-        // Conseguimos el link público de internet para reproducirlo
         const { data: { publicUrl } } = supabase.storage
           .from('audios-compositor')
           .getPublicUrl(nombreArchivo);
 
-        // Guardamos el enlace en nuestra tabla de audios
+        // Se guarda el audio. Lleva la marca del bloque.
         const { data: nuevoAudio } = await supabase
           .from('audios')
           .insert([{ bloque_id: bloqueId, nombre: `Idea ${Date.now().toString().slice(-4)}`, storage_path: publicUrl }])
@@ -226,6 +263,11 @@ function App() {
   };
 
   const eliminarAudio = async (bloqueId, audioId) => {
+    // Solo el creador de la canción puede borrar audios adjuntos
+    if (cancion.usuario_id !== usuario.id) {
+      alert("Solo el propietario original puede eliminar pistas de audio.");
+      return;
+    }
     const { error } = await supabase.from('audios').delete().eq('id', audioId);
     if (!error) {
       setCancion(prev => {
@@ -250,7 +292,6 @@ function App() {
     return () => { if (scrollIntervalRef.current) clearInterval(scrollIntervalRef.current); };
   }, [scrollActivo, velocidadScroll, modoEdicion]);
 
-  // Renderizados condicionales de seguridad
   if (cargandoUsuario) return <div style={{ color: '#fff', textAlign: 'center', marginTop: '100px' }}>Iniciando Servidor...</div>;
   if (!usuario) return <Login onLoginSuccess={(user) => setUsuario(user)} />;
 
@@ -282,7 +323,7 @@ function App() {
         .btn-est { flex: 1; min-width: 80px; padding: 10px; border: none; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; color: #fff; }
         .btn-est.intro { background-color: #3f51b5; }
         .btn-est.estrofa { background-color: #2da44e; }
-        .btn-est.pre-estribillo { background-color: #00bcd4; }
+        .btn-est.pre-estribillo { background-color: #ffcc00; color: #12141c; } /* NUEVO COLOR: AMARILLO PRE-ESTRIBILLO */
         .btn-est.estribillo { background-color: #e91e63; }
         .btn-est.puente { background-color: #9c27b0; }
         .btn-est.solo { background-color: #ff9800; }
@@ -291,7 +332,7 @@ function App() {
         .tarjeta-bloque { background: #1e2230; border-radius: 14px; padding: 15px; border-left: 6px solid #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
         .tarjeta-bloque.intro { border-left-color: #3f51b5; }
         .tarjeta-bloque.estrofa { border-left-color: #2da44e; }
-        .tarjeta-bloque.pre-estribillo { border-left-color: #00bcd4; }
+        .tarjeta-bloque.pre-estribillo { border-left-color: #ffcc00; } /* NUEVO COLOR BORDES */
         .tarjeta-bloque.estribillo { border-left-color: #e91e63; }
         .tarjeta-bloque.puente { border-left-color: #9c27b0; }
         .tarjeta-bloque.solo { border-left-color: #ff9800; }
@@ -333,7 +374,10 @@ function App() {
           {listaCanciones.map(c => (
             <div key={c.id} onClick={() => seleccionarCancion(c)} className={`item-cancion ${cancion?.id === c.id ? 'activa' : ''}`}>
               <span>🎸 {c.titulo} ({c.bpm} BPM)</span>
-              <button onClick={(e) => eliminarCancionCompleta(c.id, e)} style={{ background: 'transparent', border: 'none', color: '#ff4a4a', cursor: 'pointer' }}>🗑️</button>
+              {/* SEGURIDAD: Solo el creador puede borrar canciones completas */}
+              {usuario.id === c.usuario_id && (
+                <button onClick={(e) => eliminarCancionCompleta(c.id, e)} style={{ background: 'transparent', border: 'none', color: '#ff4a4a', cursor: 'pointer' }}>🗑️</button>
+              )}
             </div>
           ))}
         </div>
@@ -350,14 +394,26 @@ function App() {
 
           <header className="header-cancion">
             {modoEdicion ? (
-              <input type="text" value={cancion.titulo} onChange={(e) => modificarTituloBpm('titulo', e.target.value)} className="input-titulo" />
+              <input 
+                type="text" 
+                value={cancion.titulo} 
+                onChange={(e) => modificarTituloBpm('titulo', e.target.value)} 
+                className="input-titulo" 
+                disabled={cancion.usuario_id !== usuario.id} // Bloqueado si es invitado
+              />
             ) : (
               <h1 className="titulo-vivo">🎤 {cancion.titulo}</h1>
             )}
             <div className="control-bpm">
               <label>Tempo: </label>
               {modoEdicion ? (
-                <input type="number" value={cancion.bpm} onChange={(e) => modificarTituloBpm('bpm', e.target.value)} className="input-bpm" />
+                <input 
+                  type="number" 
+                  value={cancion.bpm} 
+                  onChange={(e) => modificarTituloBpm('bpm', e.target.value)} 
+                  className="input-bpm" 
+                  disabled={cancion.usuario_id !== usuario.id} // Bloqueado si es invitado
+                />
               ) : (
                 <span style={{ color: '#00ffcc', fontWeight: 'bold' }}>{cancion.bpm}</span>
               )}
@@ -365,7 +421,7 @@ function App() {
             </div>
           </header>
 
-          {modoEdicion && (
+          {modoEdicion && cancion.usuario_id === usuario.id && (
             <div className="selector-estructural">
               <div className="botones-estructura">
                 {['Intro', 'Estrofa', 'Pre-Estribillo', 'Estribillo', 'Puente', 'Solo', 'Final'].map(tipo => (
@@ -380,30 +436,49 @@ function App() {
               <div key={bloque.id} className={`tarjeta-bloque ${bloque.tipo.toLowerCase().replace('-', '')}`}>
                 <div className="encabezado-bloque">
                   <h3>{bloque.tipo} {bloque.numero}</h3>
-                  {modoEdicion && <button onClick={() => eliminarBloque(bloque.id)} style={{ background: 'transparent', border: 'none', color: '#ff4a4a', cursor: 'pointer' }}>❌ Quitar</button>}
+                  {/* SEGURIDAD: Solo el creador puede quitar un bloque estructural */}
+                  {modoEdicion && cancion.usuario_id === usuario.id && (
+                    <button onClick={() => eliminarBloque(bloque.id)} style={{ background: 'transparent', border: 'none', color: '#ff4a4a', cursor: 'pointer' }}>❌ Quitar</button>
+                  )}
                 </div>
 
                 <div className="caja-letras">
                   {modoEdicion ? (
-                    <input type="text" placeholder="Acordes..." value={bloque.acordes || ''} onChange={(e) => modificarBloqueLocal(bloque.id, 'acordes', e.target.value)} className="input-acordes" />
+                    <input 
+                      type="text" 
+                      placeholder="Acordes..." 
+                      value={bloque.acordes || ''} 
+                      onChange={(e) => modificarBloqueLocal(bloque.id, 'acordes', e.target.value)} 
+                      className="input-acordes" 
+                      disabled={cancion.usuario_id !== usuario.id} // Bloqueado si es invitado
+                    />
                   ) : (
                     bloque.acordes && <div className="acordes-vivo-txt">{bloque.acordes}</div>
                   )}
 
                   {modoEdicion ? (
-                    <textarea placeholder="Letra..." value={bloque.texto || ''} onChange={(e) => modificarBloqueLocal(bloque.id, 'texto', e.target.value)} className="txt-letra" rows="3" />
+                    <textarea 
+                      placeholder="Letra..." 
+                      value={bloque.texto || ''} 
+                      onChange={(e) => modificarBloqueLocal(bloque.id, 'texto', e.target.value)} 
+                      className="txt-letra" 
+                      rows="3" 
+                      disabled={cancion.usuario_id !== usuario.id} // Bloqueado si es invitado
+                    />
                   ) : (
                     bloque.texto && <p className="letra-vivo-txt">{bloque.texto}</p>
                   )}
                 </div>
 
+                {/* COMENTARIOS: Abiertos para que invitados dejen sus sugerencias de texto */}
                 {modoEdicion ? (
-                  <input type="text" placeholder="💡 Comentario..." value={bloque.comentarios || ''} onChange={(e) => modificarBloqueLocal(bloque.id, 'comentarios', e.target.value)} className="input-comentarios" />
+                  <input type="text" placeholder="💡 Dejá tu sugerencia o comentario..." value={bloque.comentarios || ''} onChange={(e) => modificarBloqueLocal(bloque.id, 'comentarios', e.target.value)} className="input-comentarios" />
                 ) : (
                   bloque.comentarios && <div className="comentario-vivo-txt">💡 {bloque.comentarios}</div>
                 )}
 
                 <div className="estudio-audio-bloque">
+                  {/* AUDIO DE SUGERENCIAS: Cualquier músico invitado puede grabar audios */}
                   {modoEdicion && (
                     <div>
                       {grabandoEnBloqueId === bloque.id ? (
@@ -419,7 +494,9 @@ function App() {
                       {bloque.audios.map((audio) => (
                         <div key={audio.id} className="item-audio">
                           <audio src={audio.storage_path} controls className="reproductor-nativo" />
-                          {modoEdicion && <button onClick={() => eliminarAudio(bloque.id, audio.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>🗑️</button>}
+                          {modoEdicion && cancion.usuario_id === usuario.id && (
+                            <button onClick={() => eliminarAudio(bloque.id, audio.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>🗑️</button>
+                          )}
                         </div>
                       ))}
                     </div>
