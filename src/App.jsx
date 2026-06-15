@@ -69,7 +69,7 @@ function App() {
           numero: b.numero,
           texto: b.texto,
           acordes: b.acordes,
-          comentarios: b.comentarios,
+          comments: b.comentarios,
           audios: b.audios || []
         }))
       });
@@ -322,10 +322,10 @@ function App() {
         .botones-estructura { display: flex; flex-wrap: wrap; gap: 8px; }
         .btn-est { flex: 1; min-width: 80px; padding: 10px; border: none; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; color: #fff; }
         .btn-est.intro { background-color: #3f51b5; }
-        .btn-est.estrofa { background-color: #2da44e; }
+        .btn-est.estrofa { background-color: #2da44e !important; }
         
-        /* CORREGIDO: Ahora busca exactamente 'preestribillo' sin guion, tal como lo renderiza el map */
-        .btn-est.preestribillo { background-color: #ffcc00 !important; color: #12141c !important; }
+        /* SOLUCIÓN: Identificador de clase totalmente exclusivo */
+        .btn-est.pre-chunk { background-color: #ffcc00 !important; color: #12141c !important; }
         
         .btn-est.estribillo { background-color: #e91e63; }
         .btn-est.puente { background-color: #9c27b0; }
@@ -334,10 +334,10 @@ function App() {
         .lista-bloques { display: flex; flex-direction: column; gap: 20px; }
         .tarjeta-bloque { background: #1e2230; border-radius: 14px; padding: 15px; border-left: 6px solid #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
         .tarjeta-bloque.intro { border-left-color: #3f51b5; }
-        .tarjeta-bloque.estrofa { border-left-color: #2da44e; }
+        .tarjeta-bloque.estrofa { border-left-color: #2da44e !important; }
         
-        /* CORREGIDO: Borde de la tarjeta alineado sin guion */
-        .tarjeta-bloque.preestribillo { border-left-color: #ffcc00 !important; }
+        /* SOLUCIÓN: Borde amarillo asegurado sin colisiones */
+        .tarjeta-bloque.pre-chunk { border-left-color: #ffcc00 !important; }
         
         .tarjeta-bloque.estribillo { border-left-color: #e91e63; }
         .tarjeta-bloque.puente { border-left-color: #9c27b0; }
@@ -430,86 +430,92 @@ function App() {
           {modoEdicion && cancion.usuario_id === usuario.id && (
             <div className="selector-estructural">
               <div className="botones-estructura">
-                {['Intro', 'Estrofa', 'Pre-Estribillo', 'Estribillo', 'Puente', 'Solo', 'Final'].map(tipo => (
-                  <button key={tipo} onClick={() => agregarBloque(tipo)} className={`btn-est ${tipo.toLowerCase().replace('-', '')}`}>{tipo}</button>
-                ))}
+                {['Intro', 'Estrofa', 'Pre-Estribillo', 'Estribillo', 'Puente', 'Solo', 'Final'].map(tipo => {
+                  const claseBotones = tipo === 'Pre-Estribillo' ? 'pre-chunk' : tipo.toLowerCase().replace('-', '');
+                  return (
+                    <button key={tipo} onClick={() => agregarBloque(tipo)} className={`btn-est ${claseBotones}`}>{tipo}</button>
+                  );
+                })}
               </div>
             </div>
           )}
 
           <main className="lista-bloques">
-            {cancion.bloques.map((bloque) => (
-              <div key={bloque.id} className={`tarjeta-bloque ${bloque.tipo.toLowerCase().replace('-', '')}`}>
-                <div className="encabezado-bloque">
-                  <h3>{bloque.tipo} {bloque.numero}</h3>
-                  {/* SEGURIDAD: Solo el creador puede quitar un bloque estructural */}
-                  {modoEdicion && cancion.usuario_id === usuario.id && (
-                    <button onClick={() => eliminarBloque(bloque.id)} style={{ background: 'transparent', border: 'none', color: '#ff4a4a', cursor: 'pointer' }}>❌ Quitar</button>
-                  )}
-                </div>
+            {cancion.bloques.map((bloque) => {
+              const claseTarjeta = bloque.tipo === 'Pre-Estribillo' ? 'pre-chunk' : bloque.tipo.toLowerCase().replace('-', '');
+              return (
+                <div key={bloque.id} className={`tarjeta-bloque ${claseTarjeta}`}>
+                  <div className="encabezado-bloque">
+                    <h3>{bloque.tipo} {bloque.numero}</h3>
+                    {/* SEGURIDAD: Solo el creador puede quitar un bloque estructural */}
+                    {modoEdicion && cancion.usuario_id === usuario.id && (
+                      <button onClick={() => eliminarBloque(bloque.id)} style={{ background: 'transparent', border: 'none', color: '#ff4a4a', cursor: 'pointer' }}>❌ Quitar</button>
+                    )}
+                  </div>
 
-                <div className="caja-letras">
+                  <div className="caja-letras">
+                    {modoEdicion ? (
+                      <input 
+                        type="text" 
+                        placeholder="Acordes..." 
+                        value={bloque.acordes || ''} 
+                        onChange={(e) => modificarBloqueLocal(bloque.id, 'acordes', e.target.value)} 
+                        className="input-acordes" 
+                        disabled={cancion.usuario_id !== usuario.id} // Bloqueado si es invitado
+                      />
+                    ) : (
+                      bloque.acordes && <div className="acordes-vivo-txt">{bloque.acordes}</div>
+                    )}
+
+                    {modoEdicion ? (
+                      <textarea 
+                        placeholder="Letra..." 
+                        value={bloque.texto || ''} 
+                        onChange={(e) => modificarBloqueLocal(bloque.id, 'texto', e.target.value)} 
+                        className="txt-letra" 
+                        rows="3" 
+                        disabled={cancion.usuario_id !== usuario.id} // Bloqueado si es invitado
+                      />
+                    ) : (
+                      bloque.texto && <p className="letra-vivo-txt">{bloque.texto}</p>
+                    )}
+                  </div>
+
+                  {/* COMENTARIOS: Abiertos para que invitados dejen sus sugerencias de texto */}
                   {modoEdicion ? (
-                    <input 
-                      type="text" 
-                      placeholder="Acordes..." 
-                      value={bloque.acordes || ''} 
-                      onChange={(e) => modificarBloqueLocal(bloque.id, 'acordes', e.target.value)} 
-                      className="input-acordes" 
-                      disabled={cancion.usuario_id !== usuario.id} // Bloqueado si es invitado
-                    />
+                    <input type="text" placeholder="💡 Dejá tu sugerencia o comentario..." value={bloque.comments || ''} onChange={(e) => modificarBloqueLocal(bloque.id, 'comentarios', e.target.value)} className="input-comentarios" />
                   ) : (
-                    bloque.acordes && <div className="acordes-vivo-txt">{bloque.acordes}</div>
+                    bloque.comments && <div className="comentario-vivo-txt">💡 {bloque.comments}</div>
                   )}
 
-                  {modoEdicion ? (
-                    <textarea 
-                      placeholder="Letra..." 
-                      value={bloque.texto || ''} 
-                      onChange={(e) => modificarBloqueLocal(bloque.id, 'texto', e.target.value)} 
-                      className="txt-letra" 
-                      rows="3" 
-                      disabled={cancion.usuario_id !== usuario.id} // Bloqueado si es invitado
-                    />
-                  ) : (
-                    bloque.texto && <p className="letra-vivo-txt">{bloque.texto}</p>
-                  )}
+                  <div className="estudio-audio-bloque">
+                    {/* AUDIO DE SUGERENCIAS: Cualquier músico invitado puede grabar audios */}
+                    {modoEdicion && (
+                      <div>
+                        {grabandoEnBloqueId === bloque.id ? (
+                          <button onClick={detenerGrabacion} className="btn-audio detener">⏹️ Detener</button>
+                        ) : (
+                          <button onClick={() => iniciarGrabacion(bloque.id)} disabled={grabandoEnBloqueId !== null} className="btn-audio grabar">🎙️ Grabar Idea</button>
+                        )}
+                      </div>
+                    )}
+
+                    {bloque.audios.length > 0 && (
+                      <div className="lista-audios-bloque">
+                        {bloque.audios.map((audio) => (
+                          <div key={audio.id} className="item-audio">
+                            <audio src={audio.storage_path} controls className="reproductor-nativo" />
+                            {modoEdicion && cancion.usuario_id === usuario.id && (
+                              <button onClick={() => eliminarAudio(bloque.id, audio.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>🗑️</button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-
-                {/* COMENTARIOS: Abiertos para que invitados dejen sus sugerencias de texto */}
-                {modoEdicion ? (
-                  <input type="text" placeholder="💡 Dejá tu sugerencia o comentario..." value={bloque.comentarios || ''} onChange={(e) => modificarBloqueLocal(bloque.id, 'comentarios', e.target.value)} className="input-comentarios" />
-                ) : (
-                  bloque.comentarios && <div className="comentario-vivo-txt">💡 {bloque.comentarios}</div>
-                )}
-
-                <div className="estudio-audio-bloque">
-                  {/* AUDIO DE SUGERENCIAS: Cualquier músico invitado puede grabar audios */}
-                  {modoEdicion && (
-                    <div>
-                      {grabandoEnBloqueId === bloque.id ? (
-                        <button onClick={detenerGrabacion} className="btn-audio detener">⏹️ Detener</button>
-                      ) : (
-                        <button onClick={() => iniciarGrabacion(bloque.id)} disabled={grabandoEnBloqueId !== null} className="btn-audio grabar">🎙️ Grabar Idea</button>
-                      )}
-                    </div>
-                  )}
-
-                  {bloque.audios.length > 0 && (
-                    <div className="lista-audios-bloque">
-                      {bloque.audios.map((audio) => (
-                        <div key={audio.id} className="item-audio">
-                          <audio src={audio.storage_path} controls className="reproductor-nativo" />
-                          {modoEdicion && cancion.usuario_id === usuario.id && (
-                            <button onClick={() => eliminarAudio(bloque.id, audio.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>🗑️</button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </main>
         </>
       )}
